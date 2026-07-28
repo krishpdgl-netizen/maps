@@ -1,10 +1,10 @@
-// Usage: node scripts/hash-password.js "the-password-you-want"
+// Usage: node hash-password.js "the-password-you-want"
 // Paste the printed hash into the "Password Hash" column of the Credentials tab.
 const crypto = require("crypto");
 
 const password = process.argv[2];
 if (!password) {
-  console.error("Usage: node scripts/hash-password.js <password>");
+  console.error("Usage: node hash-password.js <password>");
   process.exit(1);
 }
 
