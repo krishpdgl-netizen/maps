@@ -66,6 +66,13 @@
     box-shadow: 0 3px 10px rgba(0,0,0,0.3); cursor: pointer;
   }
   .fab-route[disabled] { opacity: 0.5; pointer-events: none; }
+  .fab-trip {
+    position: absolute; right: 16px; z-index: 45; bottom: 280px;
+    background: var(--green); color: #fff; border: none; padding: 12px 18px; border-radius: 26px;
+    font-size: 14px; font-weight: 600; display: none; align-items: center; gap: 8px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.3); cursor: pointer;
+  }
+  .fab-trip.show { display: flex; }
 
   /* BOTTOM SHEET */
   .sheet {
@@ -147,6 +154,11 @@
     </div>
     <div class="legend" id="legend"></div>
   </div>
+
+  <button class="fab-trip" id="tripBtn" onclick="startTripInMaps()">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
+    Start trip in Maps
+  </button>
 
   <button class="fab-route" id="routeBtn" onclick="optimizeRoute()">
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
@@ -330,6 +342,7 @@ function render() {
 
   renderList(list);
   document.getElementById('routeBtn').disabled = list.length < 2;
+  document.getElementById('tripBtn').classList.toggle('show', !!routeOrder && routeOrder.length >= 2);
 }
 
 function renderList(list) {
@@ -472,6 +485,39 @@ function openDirections() {
   const c = customers.find(x => x.rowNumber === selectedRow);
   if (!c) return;
   window.open(`https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`, '_blank');
+}
+
+function startTripInMaps() {
+  if (!routeOrder || routeOrder.length < 2) return;
+
+  const ordered = routeOrder
+    .map(rn => customers.find(c => c.rowNumber === rn))
+    .filter(c => c && !isNaN(c.lat) && !isNaN(c.lng));
+
+  if (ordered.length < 2) return;
+
+  // Google Maps' consumer URL reliably handles up to 9 waypoints in
+  // addition to the destination. Beyond that it can silently drop stops,
+  // so cap it and let the rep do the rest as a second trip if needed.
+  const MAX_WAYPOINTS = 9;
+  const destination = ordered[ordered.length - 1];
+  const waypointStops = ordered.slice(0, -1).slice(0, MAX_WAYPOINTS);
+
+  const params = new URLSearchParams({
+    api: '1',
+    destination: `${destination.lat},${destination.lng}`,
+    travelmode: 'driving',
+  });
+  if (waypointStops.length > 0) {
+    params.set('waypoints', waypointStops.map(c => `${c.lat},${c.lng}`).join('|'));
+  }
+
+  if (ordered.length - 1 > MAX_WAYPOINTS) {
+    alert(`This route has ${ordered.length} stops. Google Maps only accepts the first ${MAX_WAYPOINTS + 1} in one trip — the remaining stops won't be included in this link.`);
+  }
+
+  // No origin set on purpose — Maps starts from the rep's current location.
+  window.open(`https://www.google.com/maps/dir/?${params.toString()}`, '_blank');
 }
 
 function callCustomer() {
