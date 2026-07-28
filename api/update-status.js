@@ -32,6 +32,9 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    console.log("Calling Apps Script for update, rowNumber:", rowNumber, "status:", status);
+    const startTime = Date.now();
+
     const appsScriptRes = await fetch(APPS_SCRIPT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -42,7 +45,13 @@ module.exports = async function handler(req, res) {
         status,
       }),
     });
-    const data = await appsScriptRes.json();
+
+    console.log("Apps Script responded after", Date.now() - startTime, "ms with status:", appsScriptRes.status);
+
+    const rawText = await appsScriptRes.text();
+    console.log("Raw response (first 300 chars):", rawText.slice(0, 300));
+
+    const data = JSON.parse(rawText);
     if (!data.success) throw new Error(data.message || "Apps Script update failed");
 
     return res.status(200).json({ success: true });
