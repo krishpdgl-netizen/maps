@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Customer Map</title>
+<style>
+  :root {
+    --accent: #1a73e8;
+    --accent-dark: #174ea6;
+    --green: #1e8e3e;
+    --red: #d93025;
+    --amber: #f9a825;
+    --gray-bg: #f1f3f4;
+    --border: #dadce0;
+    --text-primary: #202124;
+    --text-secondary: #5f6368;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--text-primary);
+  }
+  #app { position: fixed; inset: 0; background: #fff; }
+  #map { position: absolute; inset: 0; }
+
+  /* TOP BAR */
+  .top-bar { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 14px; right: 14px; z-index: 50; }
+  .search-pill {
+    background: #fff; border-radius: 28px; height: 52px;
+    display: flex; align-items: center; padding: 0 8px 0 18px; gap: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+  }
+  .search-pill input { border: none; outline: none; flex: 1; font-size: 15px; background: transparent; }
+  .search-pill input::placeholder { color: var(--text-secondary); }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    color: var(--text-secondary); flex-shrink: 0; border: none; background: transparent; cursor: pointer;
+  }
+  .avatar-btn {
+    width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center;
+    justify-content: center; color: #fff; font-weight: 700; font-size: 13px; border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .identity-tag {
+    display: flex; align-items: center; gap: 6px; margin-top: 10px; background: #fff;
+    border-radius: 18px; padding: 6px 14px 6px 6px; width: fit-content;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-size: 13px; font-weight: 600;
+  }
+  .identity-tag .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .identity-tag .logout { color: var(--text-secondary); font-weight: 500; margin-left: 6px; cursor: pointer; }
+  .legend {
+    margin-top: 8px; background: rgba(255,255,255,0.95); border-radius: 10px; padding: 8px 10px;
+    font-size: 11px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); display: none; width: fit-content;
+  }
+  .legend.show { display: block; }
+  .legend-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* FAB */
+  .fab-route {
+    position: absolute; right: 16px; z-index: 45; bottom: 220px;
+    background: var(--accent); color: #fff; border: none; padding: 12px 18px; border-radius: 26px;
+    font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.3); cursor: pointer;
+  }
+  .fab-route[disabled] { opacity: 0.5; pointer-events: none; }
+
+  /* BOTTOM SHEET */
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 60; background: #fff;
+    border-radius: 20px 20px 0 0; box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+    transition: height 0.28s ease; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sheet.collapsed { height: 190px; }
+  .sheet.expanded { height: 62vh; }
+  .sheet-handle-area { padding: 10px 0 6px; display: flex; justify-content: center; cursor: pointer; flex-shrink: 0; }
+  .sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: #dadce0; }
+  .sheet-header { padding: 0 18px 12px; flex-shrink: 0; border-bottom: 1px solid #f0f0f0; }
+  .sheet-header h3 { margin: 0 0 4px; font-size: 16px; }
+  .sheet-header p { margin: 0; font-size: 12.5px; color: var(--text-secondary); }
+  .customer-list { overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+  .customer-row { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid #f2f2f2; cursor: pointer; }
+  .customer-row:active { background: #f7f8f9; }
+  .row-dot { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 12px; }
+  .row-body { flex: 1; min-width: 0; }
+  .row-body .name { font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-body .addr { font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-status { font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 10px; flex-shrink: 0; }
+  .status-pending { background: #fce8e6; color: var(--red); }
+  .status-visited { background: #e6f4ea; color: var(--green); }
+  .status-followup { background: #fef7e0; color: #b06000; }
+  .route-order { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 40px 30px; color: var(--text-secondary); }
+  .empty-state svg { width: 48px; height: 48px; color: #c4c7c9; margin-bottom: 14px; }
+  .empty-state h4 { margin: 0 0 6px; font-size: 15px; color: var(--text-primary); font-weight: 600; }
+  .empty-state p { margin: 0; font-size: 13px; line-height: 1.5; }
+
+  /* DETAIL OVERLAY */
+  .detail-overlay {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 70; background: #fff;
+    border-radius: 20px 20px 0 0; box-shadow: 0 -4px 24px rgba(0,0,0,0.2);
+    padding: 16px 18px calc(20px + env(safe-area-inset-bottom));
+    transform: translateY(100%); transition: transform 0.25s ease;
+  }
+  .detail-overlay.show { transform: translateY(0); }
+  .detail-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+  .detail-top h3 { margin: 0; font-size: 17px; }
+  .detail-close { background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 4px; }
+  .detail-addr { font-size: 13px; color: var(--text-secondary); margin: 2px 0 14px; }
+  .detail-status-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .status-chip { font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 14px; border: 1.5px solid transparent; cursor: pointer; }
+  .action-row { display: flex; gap: 10px; }
+  .action-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; background: var(--gray-bg); border: none; border-radius: 12px; padding: 12px 6px; font-size: 11.5px; font-weight: 600; color: var(--text-primary); cursor: pointer; }
+  .action-btn svg { width: 20px; height: 20px; }
+  .action-btn.primary { background: var(--accent); color: #fff; }
+
+  .loading-overlay {
+    position: fixed; inset: 0; z-index: 150; background: #fff; display: flex; align-items: center; justify-content: center;
+  }
+  .loading-overlay .spinner { border: 3px solid rgba(26,115,232,0.25); border-top-color: var(--accent); width: 28px; height: 28px; border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="authCheckOverlay">
+  <div class="spinner"></div>
+</div>
+
+<div id="app" style="display:none;">
+  <div id="map"></div>
+
+  <div class="top-bar">
+    <div class="search-pill">
+      <button class="icon-btn" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <input id="searchInput" type="text" placeholder="Search your customers">
+      <button class="avatar-btn" id="avatarBtn">--</button>
+    </div>
+    <div class="identity-tag">
+      <div class="dot" id="identityDot"></div>
+      <span id="identityName">—</span>
+      <span class="logout" onclick="logout()">Log out</span>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <button class="fab-route" id="routeBtn" onclick="optimizeRoute()">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    Optimize route
+  </button>
+
+  <div class="sheet collapsed" id="sheet">
+    <div class="sheet-handle-area" onclick="toggleSheet()"><div class="sheet-handle"></div></div>
+    <div class="sheet-header">
+      <h3 id="sheetTitle">Your customers</h3>
+      <p id="sheetSub">Loading…</p>
+    </div>
+    <div class="customer-list" id="customerList"></div>
+  </div>
+
+  <div class="detail-overlay" id="detailOverlay">
+    <div class="detail-top">
+      <h3 id="detailName">—</h3>
+      <button class="detail-close" onclick="closeDetail()">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <p class="detail-addr" id="detailAddr">—</p>
+    <div class="detail-status-row" id="detailStatusRow"></div>
+    <div class="action-row">
+      <button class="action-btn primary" onclick="openDirections()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        Directions
+      </button>
+      <button class="action-btn" onclick="callCustomer()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        Call
+      </button>
+      <button class="action-btn" onclick="markVisited()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+        Mark visited
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const statusColor = { pending: '#d93025', visited: '#1e8e3e', followup: '#f9a825' };
+const statusLabel = { pending: 'Pending', visited: 'Visited', followup: 'Follow-up' };
+const repPalette = ['#1a73e8', '#9334e6', '#e8710a', '#1e8e3e', '#c2185b', '#00838f'];
+
+let map, markers = [], directionsService, directionsRenderer;
+let session = null;
+let customers = [];
+let routeOrder = null;
+let selectedRow = null;
+let repColorMap = {};
+
+// ---------- AUTH GATE ----------
+// Runs before anything else renders. If there's no valid session, bounce to login.
+async function checkSessionAndBoot() {
+  try {
+    const res = await fetch('/api/customers');
+    const data = await res.json();
+
+    if (!data.success) {
+      window.location.href = '/index.html';
+      return;
+    }
+
+    session = { role: data.role, name: data.name };
+    customers = data.customers;
+    document.getElementById('authCheckOverlay').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    onAuthenticated();
+  } catch (err) {
+    window.location.href = '/index.html';
+  }
+}
+
+function onAuthenticated() {
+  const initials = session.name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
+  document.getElementById('avatarBtn').textContent = initials;
+  document.getElementById('avatarBtn').style.background = session.role === 'admin' ? '#444' : '#1a73e8';
+  document.getElementById('identityDot').style.background = session.role === 'admin' ? '#444' : '#1a73e8';
+  document.getElementById('identityName').textContent = session.role === 'admin' ? 'Admin · all reps' : session.name;
+  document.getElementById('sheetTitle').textContent = session.role === 'admin' ? 'All customers' : 'Your customers';
+
+  buildRepColorMap();
+  loadMapsScript();
+}
+
+async function logout() {
+  await fetch('/api/logout', { method: 'POST' });
+  window.location.href = '/index.html';
+}
+
+// ---------- MAP ----------
+function loadMapsScript() {
+  fetch('/api/config').then(r => r.json()).then(config => {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${config.googleMapsApiKey}&callback=initMap`;
+    script.async = true;
+    document.head.appendChild(script);
+  });
+}
+
+function initMap() {
+  map = new google.maps.Map(document.getElementById('map'), {
+    center: { lat: 19.076, lng: 72.8777 },
+    zoom: 12,
+    disableDefaultUI: true,
+    zoomControl: true,
+  });
+  directionsService = new google.maps.DirectionsService();
+  directionsRenderer = new google.maps.DirectionsRenderer({ suppressMarkers: true, map });
+  render();
+}
+
+function buildRepColorMap() {
+  repColorMap = {};
+  const legend = document.getElementById('legend');
+  legend.innerHTML = '';
+  legend.classList.toggle('show', session.role === 'admin');
+  if (session.role !== 'admin') return;
+
+  const reps = [...new Set(customers.map(c => c.assignedTo))];
+  reps.forEach((rep, i) => {
+    repColorMap[rep] = repPalette[i % repPalette.length];
+    const row = document.createElement('div');
+    row.className = 'legend-row';
+    row.innerHTML = `<div class="legend-dot" style="background:${repColorMap[rep]}"></div>${rep}`;
+    legend.appendChild(row);
+  });
+}
+
+function visibleCustomers() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  if (!q) return customers;
+  return customers.filter(c => c.name.toLowerCase().includes(q) || c.address.toLowerCase().includes(q));
+}
+
+function pinColor(c) {
+  if (session.role === 'admin') return repColorMap[c.assignedTo] || '#1a73e8';
+  return statusColor[c.status] || '#1a73e8';
+}
+
+function render() {
+  if (!map) return;
+  const list = visibleCustomers();
+
+  markers.forEach(m => m.setMap(null));
+  markers = [];
+
+  list.forEach(c => {
+    if (isNaN(c.lat) || isNaN(c.lng)) return;
+    const orderIndex = routeOrder ? routeOrder.indexOf(c.rowNumber) : -1;
+    const label = orderIndex >= 0 ? String(orderIndex + 1) : '';
+
+    const marker = new google.maps.Marker({
+      position: { lat: c.lat, lng: c.lng },
+      map,
+      title: c.name,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 11,
+        fillColor: pinColor(c),
+        fillOpacity: 1,
+        strokeColor: '#fff',
+        strokeWeight: 2,
+      },
+      label: label ? { text: label, color: '#fff', fontSize: '11px', fontWeight: '700' } : null,
+    });
+    marker.addListener('click', () => openDetail(c.rowNumber));
+    markers.push(marker);
+  });
+
+  if (list.length > 0 && !routeOrder) {
+    const valid = list.filter(c => !isNaN(c.lat) && !isNaN(c.lng));
+    if (valid.length > 0) {
+      const bounds = new google.maps.LatLngBounds();
+      valid.forEach(c => bounds.extend({ lat: c.lat, lng: c.lng }));
+      map.fitBounds(bounds, 60);
+    }
+  }
+
+  renderList(list);
+  document.getElementById('routeBtn').disabled = list.length < 2;
+}
+
+function renderList(list) {
+  const listEl = document.getElementById('customerList');
+  listEl.innerHTML = '';
+
+  if (list.length === 0) {
+    const searching = document.getElementById('searchInput').value.trim().length > 0;
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          ${searching ? '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>' : '<path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>'}
+        </svg>
+        <h4>${searching ? 'No matches' : 'No customers assigned yet'}</h4>
+        <p>${searching ? 'Try a different name or address.' : 'When a customer is assigned to you, it will show up here.'}</p>
+      </div>`;
+    document.getElementById('sheetSub').textContent = searching ? 'No matches' : 'Nothing assigned yet';
+    return;
+  }
+
+  let ordered = list;
+  if (routeOrder) ordered = routeOrder.map(rn => list.find(c => c.rowNumber === rn)).filter(Boolean);
+
+  ordered.forEach(c => {
+    const color = pinColor(c);
+    const row = document.createElement('div');
+    row.className = 'customer-row';
+    row.onclick = () => openDetail(c.rowNumber);
+    const badge = routeOrder
+      ? `<div class="route-order">${routeOrder.indexOf(c.rowNumber) + 1}</div>`
+      : `<div class="row-dot" style="background:${color}">${c.name.charAt(0)}</div>`;
+    row.innerHTML = `
+      ${badge}
+      <div class="row-body">
+        <div class="name">${c.name}</div>
+        <div class="addr">${c.address}${session.role === 'admin' ? ' · ' + c.assignedTo : ''}</div>
+      </div>
+      <div class="row-status status-${c.status}">${statusLabel[c.status] || c.status}</div>
+    `;
+    listEl.appendChild(row);
+  });
+
+  document.getElementById('sheetSub').textContent =
+    (routeOrder ? 'Route optimized · ' : '') + list.length + ' office' + (list.length === 1 ? '' : 's');
+}
+
+// ---------- ROUTE OPTIMIZATION ----------
+function optimizeRoute() {
+  const list = visibleCustomers().filter(c => !isNaN(c.lat) && !isNaN(c.lng));
+  if (list.length < 2) return;
+
+  navigator.geolocation.getCurrentPosition(pos => {
+    runDirections(list, { lat: pos.coords.latitude, lng: pos.coords.longitude });
+  }, () => {
+    runDirections(list, { lat: list[0].lat, lng: list[0].lng });
+  }, { timeout: 5000 });
+}
+
+function runDirections(list, origin) {
+  const destination = list[list.length - 1];
+  const waypoints = list.slice(0, -1).map(c => ({ location: { lat: c.lat, lng: c.lng }, stopover: true }));
+
+  directionsService.route({
+    origin,
+    destination: { lat: destination.lat, lng: destination.lng },
+    waypoints,
+    optimizeWaypoints: true,
+    travelMode: google.maps.TravelMode.DRIVING,
+  }, (result, status) => {
+    if (status !== 'OK') {
+      alert('Could not calculate route: ' + status);
+      return;
+    }
+    directionsRenderer.setDirections(result);
+    const order = result.routes[0].waypoint_order.map(i => list[i].rowNumber);
+    order.push(destination.rowNumber);
+    routeOrder = order;
+    document.getElementById('sheet').classList.remove('collapsed');
+    document.getElementById('sheet').classList.add('expanded');
+    render();
+  });
+}
+
+// ---------- DETAIL OVERLAY ----------
+function openDetail(rowNumber) {
+  selectedRow = rowNumber;
+  const c = customers.find(x => x.rowNumber === rowNumber);
+  document.getElementById('detailName').textContent = c.name;
+  document.getElementById('detailAddr').textContent = c.address + (session.role === 'admin' ? ' · Assigned to ' + c.assignedTo : '');
+
+  const row = document.getElementById('detailStatusRow');
+  row.innerHTML = '';
+  ['pending', 'followup', 'visited'].forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'status-chip';
+    chip.textContent = statusLabel[s];
+    const active = c.status === s;
+    chip.style.background = active ? statusColor[s] : '#f1f3f4';
+    chip.style.color = active ? '#fff' : '#5f6368';
+    chip.onclick = () => setStatus(rowNumber, s);
+    row.appendChild(chip);
+  });
+
+  document.getElementById('detailOverlay').classList.add('show');
+}
+
+function closeDetail() {
+  document.getElementById('detailOverlay').classList.remove('show');
+  selectedRow = null;
+}
+
+async function setStatus(rowNumber, status) {
+  const c = customers.find(x => x.rowNumber === rowNumber);
+  const previous = c.status;
+  c.status = status;
+  openDetail(rowNumber);
+  render();
+
+  try {
+    const res = await fetch('/api/update-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rowNumber, status }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+  } catch (err) {
+    c.status = previous;
+    openDetail(rowNumber);
+    render();
+    alert('Could not update status. Check your connection and try again.');
+  }
+}
+
+function markVisited() {
+  if (selectedRow != null) setStatus(selectedRow, 'visited');
+}
+
+function openDirections() {
+  const c = customers.find(x => x.rowNumber === selectedRow);
+  if (!c) return;
+  window.open(`https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`, '_blank');
+}
+
+function callCustomer() {
+  alert('Add a phone number column to the sheet to enable this.');
+}
+
+function toggleSheet() {
+  const sheet = document.getElementById('sheet');
+  sheet.classList.toggle('collapsed');
+  sheet.classList.toggle('expanded');
+}
+
+document.getElementById('searchInput')?.addEventListener('input', () => { routeOrder = null; render(); });
+
+checkSessionAndBoot();
+</script>
+
+</body>
+</html>
